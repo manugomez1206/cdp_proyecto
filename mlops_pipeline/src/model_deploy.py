@@ -14,11 +14,14 @@ from typing import List
 import uvicorn
 
 # =============================================================================
-# CARGA DEL MODELO
+# CONFIGURACIÓN
 # =============================================================================
 
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "mejor_modelo.pkl")
+
+if not os.path.exists(MODEL_PATH):
+    raise FileNotFoundError(f"Modelo no encontrado en: {MODEL_PATH}")
 
 print("📂 Cargando modelo")
 modelo = joblib.load(MODEL_PATH)
@@ -32,10 +35,8 @@ app = FastAPI(
     title="API - Modelo de Predicción de Pago de Créditos",
     description="""
     API REST para predicción de pago oportuno de créditos.
-    
     - **0** = No paga a tiempo (moroso)
     - **1** = Paga a tiempo
-    
     Proyecto: CDP - Ciencia de Datos en Producción
     Autora: Manuela Gómez Gallego
     """,
@@ -65,12 +66,10 @@ class ClienteInput(BaseModel):
 
 
 class BatchInput(BaseModel):
-    """Schema para predicciones por batch"""
     clientes: List[ClienteInput]
 
 
 class PrediccionOutput(BaseModel):
-    """Schema de salida"""
     prediccion      : int
     probabilidad_0  : float
     probabilidad_1  : float
@@ -83,17 +82,15 @@ class PrediccionOutput(BaseModel):
 
 @app.get("/")
 def root():
-    """Endpoint raíz — verifica que la API está activa"""
     return {
-        "mensaje"  : "API de Predicción de Pago de Créditos activa",
-        "version"  : "1.0.0",
-        "docs"     : "/docs"
+        "mensaje" : "API de Predicción de Pago de Créditos activa",
+        "version" : "1.0.0",
+        "docs"    : "/docs"
     }
 
 
 @app.get("/health")
 def health():
-    """Health check del servicio"""
     return {
         "status" : "ok",
         "modelo" : modelo.named_steps['model'].__class__.__name__
@@ -102,21 +99,13 @@ def health():
 
 @app.post("/predecir", response_model=PrediccionOutput)
 def predecir(cliente: ClienteInput):
-    """
-    Predicción individual para un cliente.
-    Retorna:
-    - prediccion: 0 (no paga) o 1 (paga)
-    - probabilidad_0: probabilidad de no pagar
-    - probabilidad_1: probabilidad de pagar
-    - riesgo: Alto / Bajo
-    """
     try:
         data = pd.DataFrame([cliente.dict()])
-        pred      = modelo.predict(data)[0]
-        prob      = modelo.predict_proba(data)[0]
+        pred = int(modelo.predict(data)[0])
+        prob = modelo.predict_proba(data)[0]
 
         return PrediccionOutput(
-            prediccion     = int(pred),
+            prediccion     = pred,
             probabilidad_0 = round(float(prob[0]), 4),
             probabilidad_1 = round(float(prob[1]), 4),
             riesgo         = "Alto" if pred == 0 else "Bajo"
@@ -127,31 +116,26 @@ def predecir(cliente: ClienteInput):
 
 @app.post("/predecir/batch")
 def predecir_batch(batch: BatchInput):
-    """
-    Predicción por batch para múltiples clientes.
-    Retorna lista de predicciones.
-    """
     try:
-        data = pd.DataFrame([c.dict() for c in batch.clientes])
-
-        predicciones  = modelo.predict(data)
+        data           = pd.DataFrame([c.dict() for c in batch.clientes])
+        predicciones   = modelo.predict(data)
         probabilidades = modelo.predict_proba(data)
 
         resultados = []
         for i, (pred, prob) in enumerate(zip(predicciones, probabilidades)):
             resultados.append({
-                "cliente_id"    : i + 1,
-                "prediccion"    : int(pred),
-                "probabilidad_0": round(float(prob[0]), 4),
-                "probabilidad_1": round(float(prob[1]), 4),
-                "riesgo"        : "Alto" if pred == 0 else "Bajo"
+                "cliente_id"     : i + 1,
+                "prediccion"     : int(pred),
+                "probabilidad_0" : round(float(prob[0]), 4),
+                "probabilidad_1" : round(float(prob[1]), 4),
+                "riesgo"         : "Alto" if pred == 0 else "Bajo"
             })
 
         return {
-            "total_clientes"  : len(resultados),
+            "total_clientes"   : len(resultados),
             "total_riesgo_alto": sum(1 for r in resultados if r["riesgo"] == "Alto"),
             "total_riesgo_bajo": sum(1 for r in resultados if r["riesgo"] == "Bajo"),
-            "predicciones"    : resultados
+            "predicciones"     : resultados
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -159,18 +143,17 @@ def predecir_batch(batch: BatchInput):
 
 @app.get("/modelo/info")
 def modelo_info():
-    """Información del modelo desplegado"""
     return {
-        "modelo"    : modelo.named_steps['model'].__class__.__name__,
-        "version"   : "1.0.0",
-        "features"  : 15,
-        "clases"    : {
+        "modelo"            : "SGDClassifier",
+        "version"           : "1.0.0",
+        "features"          : 15,
+        "clases"            : {
             "0": "No paga a tiempo",
             "1": "Paga a tiempo"
         },
         "metrica_principal" : "recall_clase0",
-        "recall_clase0"     : 0.488,
-        "balanced_accuracy" : 0.631
+        "recall_clase0"     : 0.592,
+        "balanced_accuracy" : 0.624
     }
 
 
@@ -183,5 +166,5 @@ if __name__ == "__main__":
         "model_deploy:app",
         host="0.0.0.0",
         port=8000,
-        reload=True
+        reload=False
     )

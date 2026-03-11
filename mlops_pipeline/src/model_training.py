@@ -7,11 +7,13 @@
 import os
 import pandas as pd
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
 import joblib
 
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import SGDClassifier
 from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
@@ -152,10 +154,11 @@ def summarize_classification(name, pipeline, X_test, y_test, results):
 scale = int((y_train == 1).sum() / (y_train == 0).sum())
 
 modelos = {
-    "Regresion Logistica": LogisticRegression(
-        max_iter=1000,
+    "Regresion Logistica": SGDClassifier(
+        loss="log_loss",
         random_state=42,
-        class_weight="balanced"
+        class_weight="balanced",
+        max_iter=1000
     ),
     "Random Forest": RandomForestClassifier(
         n_estimators=100,

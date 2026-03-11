@@ -102,6 +102,13 @@ print("\n📊 Tabla de Métricas:")
 print("="*55)
 print(df_metricas.to_string(index=False))
 
+#=============================================================================
+# GUARDAR MÉTRICAS EN EXCEL
+#=============================================================================
+METRICS_PATH = os.path.join(BASE_DIR, "metricas_modelo.xlsx")
+df_metricas.to_excel(METRICS_PATH, index=False)
+print(f"\n✅ Métricas guardadas en: {METRICS_PATH}")
+
 # =============================================================================
 # GRÁFICAS DE EVALUACIÓN
 # =============================================================================
