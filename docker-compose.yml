@@ -1,0 +1,18 @@
+# =============================================================================
+# docker-compose.yml
+# Orquestación del contenedor del modelo de créditos
+# =============================================================================
+
+version: '3.8'
+
+services:
+  modelo-creditos:
+    build: .
+    container_name: cdp_modelo_creditos
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./mlops_pipeline/src:/app/src
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped

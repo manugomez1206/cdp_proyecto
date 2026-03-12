@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Entorno virtual
+.venv/
+env/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Archivos temporales
+*.log
+*.tmp
+
+# Archivos sensibles
+.env
+
+# Archivos generados automáticamente
+mlops_pipeline/src/predicciones_log.xlsx
