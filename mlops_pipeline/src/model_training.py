@@ -18,7 +18,7 @@ from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
 
-from sklearn.model_selection import StratifiedKFold, cross_validate
+from sklearn.model_selection import StratifiedKFold, cross_validate, learning_curve
 from sklearn.metrics import (
     classification_report,
     ConfusionMatrixDisplay,
@@ -70,25 +70,13 @@ print(f"📊 Train: {X_train.shape} | Test: {X_test.shape}")
 print(f"🎯 Desbalance - clase 0: {(y_train==0).sum()} | clase 1: {(y_train==1).sum()}")
 
 # =============================================================================
-# FUNCIONES REQUERIDAS 
+# FUNCIONES REQUERIDAS
 # =============================================================================
 
 def build_model(name, estimator, X_train, y_train):
     """
     Construye un pipeline con SMOTE + modelo, lo entrena y retorna
     el pipeline entrenado junto con el nombre del modelo.
-
-    Parámetros:
-    -----------
-    name      : str   — nombre del modelo
-    estimator : obj   — instancia del clasificador
-    X_train   : df    — features de entrenamiento
-    y_train   : serie — variable objetivo de entrenamiento
-
-    Retorna:
-    --------
-    name      : str      — nombre del modelo
-    pipeline  : Pipeline — pipeline entrenado con SMOTE + modelo
     """
     pipeline = ImbPipeline(steps=[
         ("smote", SMOTE(random_state=42)),
@@ -103,18 +91,6 @@ def summarize_classification(name, pipeline, X_test, y_test, results):
     """
     Evalúa el modelo en test, genera el classification report y
     agrega las métricas al diccionario de resultados.
-
-    Parámetros:
-    -----------
-    name     : str  — nombre del modelo
-    pipeline : obj  — pipeline entrenado
-    X_test   : df   — features de prueba
-    y_test   : serie — variable objetivo de prueba
-    results  : dict — diccionario acumulador de métricas
-
-    Retorna:
-    --------
-    results  : dict — diccionario actualizado con métricas del modelo
     """
     y_pred = pipeline.predict(X_test)
 
@@ -146,12 +122,83 @@ def summarize_classification(name, pipeline, X_test, y_test, results):
 
     return results
 
+
+def plot_learning_curve(name, pipeline, X_train, y_train):
+    """
+    Genera la curva de aprendizaje del modelo para evaluar
+    si hay overfitting o underfitting.
+    """
+    skfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    scorer = make_scorer(recall_score, pos_label=0)
+
+    train_sizes, train_scores, val_scores = learning_curve(
+        pipeline, X_train, y_train,
+        cv=skfold,
+        scoring=scorer,
+        n_jobs=-1,
+        train_sizes=np.linspace(0.1, 1.0, 10)
+    )
+
+    train_mean = train_scores.mean(axis=1)
+    train_std  = train_scores.std(axis=1)
+    val_mean   = val_scores.mean(axis=1)
+    val_std    = val_scores.std(axis=1)
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.plot(train_sizes, train_mean, label="Train", color="blue")
+    ax.fill_between(train_sizes, train_mean - train_std, train_mean + train_std, alpha=0.1, color="blue")
+    ax.plot(train_sizes, val_mean, label="Validación", color="orange")
+    ax.fill_between(train_sizes, val_mean - val_std, val_mean + val_std, alpha=0.1, color="orange")
+    ax.set_title(f"Curva de Aprendizaje - {name}")
+    ax.set_xlabel("Tamaño del conjunto de entrenamiento")
+    ax.set_ylabel("Recall clase 0")
+    ax.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(BASE_DIR, f"learning_curve_{name.replace(' ', '_')}.png"))
+    plt.close()
+    print(f"✅ Curva de aprendizaje guardada: {name}")
+
+
+def plot_scalability(name, pipeline, X_train, y_train):
+    """
+    Genera la curva de escalabilidad del modelo mostrando
+    el tiempo de entrenamiento vs tamaño del dataset.
+    """
+    skfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    scorer = make_scorer(recall_score, pos_label=0)
+
+    train_sizes, _, _, fit_times, _ = learning_curve(
+        pipeline, X_train, y_train,
+        cv=skfold,
+        scoring=scorer,
+        n_jobs=-1,
+        train_sizes=np.linspace(0.1, 1.0, 10),
+        return_times=True
+    )
+
+    fit_times_mean = fit_times.mean(axis=1)
+    fit_times_std  = fit_times.std(axis=1)
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.plot(train_sizes, fit_times_mean, color="green")
+    ax.fill_between(
+        train_sizes,
+        fit_times_mean - fit_times_std,
+        fit_times_mean + fit_times_std,
+        alpha=0.1, color="green"
+    )
+    ax.set_title(f"Curva de Escalabilidad - {name}")
+    ax.set_xlabel("Tamaño del conjunto de entrenamiento")
+    ax.set_ylabel("Tiempo de entrenamiento (s)")
+    plt.tight_layout()
+    plt.savefig(os.path.join(BASE_DIR, f"scalability_{name.replace(' ', '_')}.png"))
+    plt.close()
+    print(f"✅ Curva de escalabilidad guardada: {name}")
+
+
 # =============================================================================
 # DEFINICIÓN DE MODELOS
 # =============================================================================
-
-# Ratio de desbalance para penalizar clase minoritaria
-scale = int((y_train == 1).sum() / (y_train == 0).sum())
 
 modelos = {
     "Regresion Logistica": SGDClassifier(
@@ -221,16 +268,18 @@ for name, estimator in modelos.items():
     print(f"  f1_clase0         → {cv_scores['test_f1_clase0'].mean():.3f} ± {cv_scores['test_f1_clase0'].std():.3f}")
 
 # =============================================================================
-# ENTRENAMIENTO Y EVALUACIÓN FINAL
+# ENTRENAMIENTO, EVALUACIÓN Y CURVAS
 # =============================================================================
 
 pipelines = {}
 results   = {}
 
 for name, estimator in modelos.items():
-    name, pipeline    = build_model(name, estimator, X_train, y_train)
-    pipelines[name]   = pipeline
-    results           = summarize_classification(name, pipeline, X_test, y_test, results)
+    name, pipeline  = build_model(name, estimator, X_train, y_train)
+    pipelines[name] = pipeline
+    results         = summarize_classification(name, pipeline, X_test, y_test, results)
+    plot_learning_curve(name, pipeline, X_train, y_train)
+    plot_scalability(name, pipeline, X_train, y_train)
 
 # =============================================================================
 # TABLA COMPARATIVA
@@ -263,10 +312,9 @@ plt.close()
 mejor_modelo_nombre = df_results["recall_clase0"].idxmax()
 mejor_pipeline      = pipelines[mejor_modelo_nombre]
 
-print(f"\n Mejor modelo: {mejor_modelo_nombre}")
+print(f"\n✅ Mejor modelo: {mejor_modelo_nombre}")
 print(f"   recall_clase0: {df_results.loc[mejor_modelo_nombre, 'recall_clase0']:.3f}")
 
-# Guardar modelo
 MODEL_PATH = os.path.join(BASE_DIR, "mejor_modelo.pkl")
 joblib.dump(mejor_pipeline, MODEL_PATH)
 print(f"\n✅ Modelo guardado en: {MODEL_PATH}")
