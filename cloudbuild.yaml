@@ -1,9 +1,38 @@
 steps:
+  # Paso 1: Verificar estructura de carpetas
   - name: 'python:3.11'
     entrypoint: python
     args:
       - '-c'
-      - 'import os; print("Pipeline ejecutado correctamente")'
+      - |
+        import os
+        carpetas = ['mlops_pipeline/src', '.github/workflows']
+        archivos = [
+          'mlops_pipeline/src/ft_engineering.py',
+          'mlops_pipeline/src/model_training.py',
+          'mlops_pipeline/src/model_deploy.py',
+          'mlops_pipeline/src/model_monitoring.py',
+          'requirements.txt',
+          'Dockerfile'
+        ]
+        for c in carpetas:
+          assert os.path.exists(c), f'Carpeta no encontrada: {c}'
+          print(f'Carpeta OK: {c}')
+        for a in archivos:
+          assert os.path.exists(a), f'Archivo no encontrado: {a}'
+          print(f'Archivo OK: {a}')
+        print('Estructura verificada correctamente')
+
+  # Paso 2: Notificación final
+  - name: 'python:3.11'
+    entrypoint: python
+    args:
+      - '-c'
+      - |
+        print('Pipeline completado exitosamente')
+        print('Repositorio: cdp_proyecto')
+        print('Rama: master')
+        print('Pruebas de estructura: OK')
 
 options:
   logging: CLOUD_LOGGING_ONLY
