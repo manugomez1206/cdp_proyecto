@@ -1,0 +1,8 @@
+steps:
+  - name: 'python:3.11'
+    entrypoint: python
+    args:
+      - '-c'
+      - 'import os; print("Pipeline ejecutado correctamente")'
+
+timeout: '600s'
