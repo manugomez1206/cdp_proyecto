@@ -23,16 +23,58 @@ steps:
           print(f'Archivo OK: {a}')
         print('Estructura verificada correctamente')
 
-  # Paso 2: Notificación final
+  # Paso 2: Enviar notificación por email
   - name: 'python:3.11'
     entrypoint: python
+    secretEnv: ['GMAIL_PASSWORD']
     args:
       - '-c'
       - |
-        print('Pipeline completado exitosamente')
-        print('Repositorio: cdp_proyecto')
-        print('Rama: master')
-        print('Pruebas de estructura: OK')
+        import smtplib
+        import os
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+
+        remitente = "manugomezgallego12@gmail.com"
+        destinatario = "manugomezgallego12@gmail.com"
+        password = os.environ['GMAIL_PASSWORD']
+
+        msg = MIMEMultipart()
+        msg['From'] = remitente
+        msg['To'] = destinatario
+        msg['Subject'] = "CDP Pipeline - Compilación exitosa"
+
+        cuerpo = """
+        Hola Manuela,
+
+        El pipeline de CDP se ejecutó exitosamente.
+
+        Detalles:
+        - Repositorio: cdp_proyecto
+        - Rama: master
+        - Pruebas de estructura: OK
+        - Estado: EXITOSO
+
+        Saludos,
+        GCP Cloud Build
+        """
+
+        msg.attach(MIMEText(cuerpo, 'plain'))
+
+        try:
+            servidor = smtplib.SMTP('smtp.gmail.com', 587)
+            servidor.starttls()
+            servidor.login(remitente, password)
+            servidor.sendmail(remitente, destinatario, msg.as_string())
+            servidor.quit()
+            print('Notificación enviada correctamente')
+        except Exception as e:
+            print(f'Error al enviar notificación: {e}')
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/$PROJECT_ID/secrets/gmail-app-password/versions/latest
+      env: 'GMAIL_PASSWORD'
 
 options:
   logging: CLOUD_LOGGING_ONLY
