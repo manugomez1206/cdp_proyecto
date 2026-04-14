@@ -2,7 +2,6 @@ pipeline {
     agent any
 
     triggers {
-        // Trigger automático al hacer merge a master
         githubPush()
     }
 
@@ -20,7 +19,11 @@ pipeline {
         stage('Instalar Dependencias') {
             steps {
                 echo 'Instalando dependencias...'
-                sh 'pip install -r requirements.txt'
+                sh '''
+                    apt-get update -qq
+                    apt-get install -y python3 python3-pip -qq
+                    pip3 install -r requirements.txt --break-system-packages
+                '''
                 echo 'Dependencias instaladas correctamente'
             }
         }
@@ -28,32 +31,27 @@ pipeline {
         stage('Verificar Estructura de Carpetas') {
             steps {
                 echo 'Verificando estructura de carpetas...'
-                script {
-                    def carpetas = [
-                        'mlops_pipeline/src',
-                        '.github/workflows'
-                    ]
-                    def archivos = [
-                        'mlops_pipeline/src/ft_engineering.py',
-                        'mlops_pipeline/src/model_training.py',
-                        'mlops_pipeline/src/model_deploy.py',
-                        'mlops_pipeline/src/model_monitoring.py',
-                        'requirements.txt',
-                        'Dockerfile'
-                    ]
-                    carpetas.each { carpeta ->
-                        if (!fileExists(carpeta)) {
-                            error "Carpeta no encontrada: ${carpeta}"
-                        }
-                        echo "Carpeta OK: ${carpeta}"
-                    }
-                    archivos.each { archivo ->
-                        if (!fileExists(archivo)) {
-                            error "Archivo no encontrado: ${archivo}"
-                        }
-                        echo "Archivo OK: ${archivo}"
-                    }
-                }
+                sh '''
+                    python3 -c "
+import os
+carpetas = ['mlops_pipeline/src', '.github/workflows']
+archivos = [
+    'mlops_pipeline/src/ft_engineering.py',
+    'mlops_pipeline/src/model_training.py',
+    'mlops_pipeline/src/model_deploy.py',
+    'mlops_pipeline/src/model_monitoring.py',
+    'requirements.txt',
+    'Dockerfile'
+]
+for c in carpetas:
+    assert os.path.exists(c), f'Carpeta no encontrada: {c}'
+    print(f'Carpeta OK: {c}')
+for a in archivos:
+    assert os.path.exists(a), f'Archivo no encontrado: {a}'
+    print(f'Archivo OK: {a}')
+print('Estructura verificada correctamente')
+"
+                '''
                 echo 'Estructura de carpetas verificada correctamente'
             }
         }
@@ -65,7 +63,6 @@ pipeline {
                 echo "Repositorio: cdp_proyecto"
                 echo "Rama: master"
                 echo "Pruebas de estructura: OK"
-                echo "Fecha: ${new Date()}"
             }
         }
     }
