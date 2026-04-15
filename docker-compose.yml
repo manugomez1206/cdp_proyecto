@@ -3,16 +3,20 @@
 # Orquestación del contenedor del modelo de créditos
 # =============================================================================
 
-version: '3.8'
-
+version: '3.9'
 services:
-  modelo-creditos:
-    build: .
-    container_name: cdp_modelo_creditos
+  jenkins:
+    image: jenkins/jenkins:lts-jdk17
+    container_name: jenkins
+    user: root
     ports:
-      - "8000:8000"
+      - "8080:8080"
+      - "50000:50000"
     volumes:
-      - ./mlops_pipeline/src:/app/src
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - C:\Users\Manuela\cdp_proyecto:/var/jenkins_home/workspace
     environment:
-      - PYTHONUNBUFFERED=1
-    restart: unless-stopped
+      - DOCKER_HOST=unix:///var/run/docker.sock
+volumes:
+  jenkins_home: {}
