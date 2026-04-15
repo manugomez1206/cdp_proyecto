@@ -69,46 +69,44 @@ print('Estructura verificada correctamente')
 
     post {
         success {
-            emailext(
+            mail(
                 to: 'manugomezgallego12@gmail.com',
                 subject: "CDP Pipeline - Compilación exitosa #${BUILD_NUMBER}",
                 body: """
-                Hola Manuela,
+Hola Manuela,
 
-                El pipeline de CDP se ejecutó exitosamente.
+El pipeline de CDP se ejecutó exitosamente.
 
-                Detalles:
-                - Job: ${JOB_NAME}
-                - Build: #${BUILD_NUMBER}
-                - Repositorio: cdp_proyecto
-                - Rama: master
-                - Pruebas de estructura: OK
-                - Estado: EXITOSO
-                - URL: ${BUILD_URL}
+Detalles:
+- Job: ${JOB_NAME}
+- Build: #${BUILD_NUMBER}
+- Repositorio: cdp_proyecto
+- Rama: master
+- Pruebas de estructura: OK
+- Estado: EXITOSO
 
-                Saludos,
-                Jenkins
+Saludos,
+Jenkins
                 """
             )
             echo 'Pipeline ejecutado exitosamente'
         }
         failure {
-            emailext(
+            mail(
                 to: 'manugomezgallego12@gmail.com',
                 subject: "CDP Pipeline - Compilación fallida #${BUILD_NUMBER}",
                 body: """
-                Hola Manuela,
+Hola Manuela,
 
-                El pipeline de CDP falló.
+El pipeline de CDP falló.
 
-                Detalles:
-                - Job: ${JOB_NAME}
-                - Build: #${BUILD_NUMBER}
-                - Estado: FALLIDO
-                - URL: ${BUILD_URL}
+Detalles:
+- Job: ${JOB_NAME}
+- Build: #${BUILD_NUMBER}
+- Estado: FALLIDO
 
-                Saludos,
-                Jenkins
+Saludos,
+Jenkins
                 """
             )
             echo 'Pipeline falló — revisar logs'
