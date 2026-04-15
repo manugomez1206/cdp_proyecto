@@ -22,7 +22,6 @@ pipeline {
                 sh '''
                     if [ -f requirements.txt ]; then
                         echo "requirements.txt encontrado"
-                        echo "Dependencias definidas:"
                         cat requirements.txt
                     else
                         echo "requirements.txt no encontrado"
@@ -56,25 +55,62 @@ for a in archivos:
 print('Estructura verificada correctamente')
 "
                 '''
-                echo 'Estructura de carpetas verificada correctamente'
+                echo 'Estructura verificada correctamente'
             }
         }
 
         stage('Notificación') {
             steps {
+                echo 'Enviando notificación...'
                 echo 'Pipeline completado exitosamente'
-                echo 'Repositorio: cdp_proyecto'
-                echo 'Rama: master'
-                echo 'Pruebas de estructura: OK'
             }
         }
     }
 
     post {
         success {
+            emailext(
+                to: 'manugomezgallego12@gmail.com',
+                subject: "CDP Pipeline - Compilación exitosa #${BUILD_NUMBER}",
+                body: """
+                Hola Manuela,
+
+                El pipeline de CDP se ejecutó exitosamente.
+
+                Detalles:
+                - Job: ${JOB_NAME}
+                - Build: #${BUILD_NUMBER}
+                - Repositorio: cdp_proyecto
+                - Rama: master
+                - Pruebas de estructura: OK
+                - Estado: EXITOSO
+                - URL: ${BUILD_URL}
+
+                Saludos,
+                Jenkins
+                """
+            )
             echo 'Pipeline ejecutado exitosamente'
         }
         failure {
+            emailext(
+                to: 'manugomezgallego12@gmail.com',
+                subject: "CDP Pipeline - Compilación fallida #${BUILD_NUMBER}",
+                body: """
+                Hola Manuela,
+
+                El pipeline de CDP falló.
+
+                Detalles:
+                - Job: ${JOB_NAME}
+                - Build: #${BUILD_NUMBER}
+                - Estado: FALLIDO
+                - URL: ${BUILD_URL}
+
+                Saludos,
+                Jenkins
+                """
+            )
             echo 'Pipeline falló — revisar logs'
         }
     }
