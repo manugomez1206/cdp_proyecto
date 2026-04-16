@@ -16,15 +16,18 @@ pipeline {
             }
         }
 
-        stage('Instalar Dependencias') {
+        stage('Verificar Dependencias') {
             steps {
-                echo 'Instalando dependencias...'
+                echo 'Verificando archivo de dependencias...'
                 sh '''
-                    apt-get update -qq
-                    apt-get install -y python3 python3-pip -qq
-                    pip3 install -r requirements.txt --break-system-packages
+                    if [ -f requirements.txt ]; then
+                        echo "requirements.txt encontrado"
+                        cat requirements.txt
+                    else
+                        echo "requirements.txt no encontrado"
+                        exit 1
+                    fi
                 '''
-                echo 'Dependencias instaladas correctamente'
             }
         }
 
@@ -52,17 +55,15 @@ for a in archivos:
 print('Estructura verificada correctamente')
 "
                 '''
-                echo 'Estructura de carpetas verificada correctamente'
+                echo 'Estructura verificada correctamente'
             }
         }
 
-        stage('Notificación') {
+        stage('Notificacion') {
             steps {
-                echo 'Enviando notificación...'
-                echo 'Pipeline completado exitosamente'
-                echo "Repositorio: cdp_proyecto"
-                echo "Rama: master"
-                echo "Pruebas de estructura: OK"
+                echo 'Enviando notificacion por email...'
+                sh 'python3 send_email.py'
+                echo 'Notificacion enviada'
             }
         }
     }
@@ -72,7 +73,7 @@ print('Estructura verificada correctamente')
             echo 'Pipeline ejecutado exitosamente'
         }
         failure {
-            echo 'Pipeline falló — revisar logs'
+            echo 'Pipeline fallo — revisar logs'
         }
     }
 }
