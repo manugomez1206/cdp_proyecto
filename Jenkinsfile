@@ -69,7 +69,7 @@ print('Estructura verificada correctamente')
 
     post {
         success {
-            mail(
+            emailext(
                 to: 'manugomezgallego12@gmail.com',
                 subject: "CDP Pipeline - Compilación exitosa #${BUILD_NUMBER}",
                 body: """
@@ -92,7 +92,7 @@ Jenkins
             echo 'Pipeline ejecutado exitosamente'
         }
         failure {
-            mail(
+            emailext(
                 to: 'manugomezgallego12@gmail.com',
                 subject: "CDP Pipeline - Compilación fallida #${BUILD_NUMBER}",
                 body: """
@@ -112,4 +112,3 @@ Jenkins
             echo 'Pipeline falló — revisar logs'
         }
     }
-}
