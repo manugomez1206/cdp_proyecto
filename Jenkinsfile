@@ -62,45 +62,8 @@ print('Estructura verificada correctamente')
         stage('Notificacion') {
             steps {
                 echo 'Enviando notificacion por email...'
-                sh '''
-                    python3 -c "
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-
-remitente = 'manugomezgallego12@gmail.com'
-destinatario = 'manugomezgallego12@gmail.com'
-password = 'ljxx kjdg awrb iwfs'
-
-msg = MIMEMultipart()
-msg['From'] = remitente
-msg['To'] = destinatario
-msg['Subject'] = 'CDP Pipeline Jenkins - Compilacion exitosa'
-
-cuerpo = '''
-Hola Manuela,
-
-El pipeline de CDP en Jenkins se ejecuto exitosamente.
-
-Detalles:
-- Repositorio: cdp_proyecto
-- Rama: master
-- Pruebas de estructura: OK
-- Estado: EXITOSO
-
-Saludos,
-Jenkins
-'''
-
-msg.attach(MIMEText(cuerpo, 'plain'))
-servidor = smtplib.SMTP('smtp.gmail.com', 587)
-servidor.starttls()
-servidor.login(remitente, password)
-servidor.sendmail(remitente, destinatario, msg.as_string())
-servidor.quit()
-print('Correo enviado correctamente')
-"
-                '''
+                sh 'python3 send_email.py'
+                echo 'Notificacion enviada'
             }
         }
     }
