@@ -1,0 +1,371 @@
+# PIPELINE DEFINITION
+# Name: cdp-creditos-pipeline
+# Description: Pipeline custom para predicción de pago de créditos
+# Inputs:
+#    bucket_name: str [Default: 'cdp-proyecto-datos']
+#    file_name: str [Default: 'Base_de_datos.csv']
+components:
+  comp-cargar-datos:
+    executorLabel: exec-cargar-datos
+    inputDefinitions:
+      parameters:
+        bucket_name:
+          parameterType: STRING
+        file_name:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        dataset:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+  comp-entrenar-modelo:
+    executorLabel: exec-entrenar-modelo
+    inputDefinitions:
+      artifacts:
+        train_data:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+    outputDefinitions:
+      artifacts:
+        metrics:
+          artifactType:
+            schemaTitle: system.Metrics
+            schemaVersion: 0.0.1
+        model:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+  comp-evaluar-modelo:
+    executorLabel: exec-evaluar-modelo
+    inputDefinitions:
+      artifacts:
+        model:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+        test_data:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+    outputDefinitions:
+      artifacts:
+        metrics:
+          artifactType:
+            schemaTitle: system.Metrics
+            schemaVersion: 0.0.1
+  comp-preprocesar-datos:
+    executorLabel: exec-preprocesar-datos
+    inputDefinitions:
+      artifacts:
+        dataset:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+    outputDefinitions:
+      artifacts:
+        test_data:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+        train_data:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+deploymentSpec:
+  executors:
+    exec-cargar-datos:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - cargar_datos
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'pandas' 'google-cloud-storage'\
+          \ 'scikit-learn' 'imbalanced-learn' 'joblib' 'openpyxl'  &&  python3 -m\
+          \ pip install --quiet --no-warn-script-location 'kfp==2.16.0' '--no-deps'\
+          \ 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\
+          \n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef cargar_datos(\n    bucket_name: str,\n    file_name: str,\n \
+          \   dataset: Output[Dataset]\n):\n    \"\"\"Carga los datos desde GCS\"\"\
+          \"\n    from google.cloud import storage\n    import pandas as pd\n    import\
+          \ io\n\n    client = storage.Client()\n    bucket = client.bucket(bucket_name)\n\
+          \    blob   = bucket.blob(file_name)\n    data   = blob.download_as_bytes()\n\
+          \    df     = pd.read_csv(io.BytesIO(data))\n\n    df.to_csv(dataset.path,\
+          \ index=False)\n    print(f\"Datos cargados: {df.shape}\")\n\n"
+        image: python:3.11
+        resources:
+          cpuLimit: 1.0
+          memoryLimit: 4.0
+          resourceCpuLimit: '1'
+          resourceMemoryLimit: 4G
+    exec-entrenar-modelo:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - entrenar_modelo
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'pandas' 'scikit-learn'\
+          \ 'imbalanced-learn' 'joblib'  &&  python3 -m pip install --quiet --no-warn-script-location\
+          \ 'kfp==2.16.0' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"\
+          3.9\"' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef entrenar_modelo(\n    train_data: Input[Dataset],\n    model:\
+          \ Output[Model],\n    metrics: Output[Metrics]\n):\n    \"\"\"Entrena el\
+          \ modelo de regresi\xF3n log\xEDstica con SMOTE\"\"\"\n    import pandas\
+          \ as pd\n    import joblib\n    import numpy as np\n    from sklearn.linear_model\
+          \ import SGDClassifier\n    from sklearn.preprocessing import StandardScaler,\
+          \ OneHotEncoder\n    from sklearn.compose import ColumnTransformer\n   \
+          \ from sklearn.metrics import (recall_score, balanced_accuracy_score, f1_score)\n\
+          \    from imblearn.over_sampling import SMOTE\n    from imblearn.pipeline\
+          \ import Pipeline as ImbPipeline\n\n    df      = pd.read_csv(train_data.path)\n\
+          \    X_train = df.drop(columns=['Pago_atiempo'])\n    y_train = df['Pago_atiempo']\n\
+          \n    num_features = ['capital_prestado_log', 'plazo_meses', 'edad_cliente',\n\
+          \                    'salario_log', 'ratio_cuota_salario', 'puntaje_datacredito',\n\
+          \                    'huella_consulta', 'total_creditos']\n    cat_features\
+          \ = ['tipo_credito', 'tipo_laboral']\n\n    num_features = [f for f in num_features\
+          \ if f in X_train.columns]\n    cat_features = [f for f in cat_features\
+          \ if f in X_train.columns]\n\n    preprocessor = ColumnTransformer([\n \
+          \       ('num', StandardScaler(), num_features),\n        ('cat', OneHotEncoder(handle_unknown='ignore'),\
+          \ cat_features)\n    ])\n\n    pipeline = ImbPipeline([\n        ('preprocessor',\
+          \ preprocessor),\n        ('smote', SMOTE(random_state=42)),\n        ('model',\
+          \ SGDClassifier(loss='log_loss', class_weight='balanced',\n            \
+          \                    random_state=42, max_iter=1000))\n    ])\n\n    pipeline.fit(X_train,\
+          \ y_train)\n    y_pred = pipeline.predict(X_train)\n\n    recall  = recall_score(y_train,\
+          \ y_pred, pos_label=0)\n    bal_acc = balanced_accuracy_score(y_train, y_pred)\n\
+          \    f1      = f1_score(y_train, y_pred, pos_label=0)\n\n    metrics.log_metric(\"\
+          recall_clase0\",     recall)\n    metrics.log_metric(\"balanced_accuracy\"\
+          , bal_acc)\n    metrics.log_metric(\"f1_clase0\",         f1)\n\n    print(f\"\
+          Recall clase 0: {recall:.3f}\")\n    print(f\"Balanced Accuracy: {bal_acc:.3f}\"\
+          )\n    print(f\"F1 clase 0: {f1:.3f}\")\n\n    joblib.dump(pipeline, model.path\
+          \ + \".pkl\")\n\n"
+        image: python:3.11
+        resources:
+          cpuLimit: 1.0
+          memoryLimit: 4.0
+          resourceCpuLimit: '1'
+          resourceMemoryLimit: 4G
+    exec-evaluar-modelo:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - evaluar_modelo
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'pandas' 'scikit-learn'\
+          \ 'imbalanced-learn' 'joblib'  &&  python3 -m pip install --quiet --no-warn-script-location\
+          \ 'kfp==2.16.0' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"\
+          3.9\"' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef evaluar_modelo(\n    test_data: Input[Dataset],\n    model: Input[Model],\n\
+          \    metrics: Output[Metrics]\n):\n    \"\"\"Eval\xFAa el modelo en el conjunto\
+          \ de prueba\"\"\"\n    import pandas as pd\n    import joblib\n    from\
+          \ sklearn.metrics import (recall_score, balanced_accuracy_score,\n     \
+          \                             f1_score, roc_auc_score, average_precision_score)\n\
+          \n    df     = pd.read_csv(test_data.path)\n    X_test = df.drop(columns=['Pago_atiempo'])\n\
+          \    y_test = df['Pago_atiempo']\n\n    pipeline = joblib.load(model.path\
+          \ + \".pkl\")\n    y_pred   = pipeline.predict(X_test)\n    y_prob   = pipeline.predict_proba(X_test)[:,\
+          \ 0]\n\n    recall   = recall_score(y_test, y_pred, pos_label=0)\n    bal_acc\
+          \  = balanced_accuracy_score(y_test, y_pred)\n    f1       = f1_score(y_test,\
+          \ y_pred, pos_label=0)\n    roc_auc  = roc_auc_score(y_test, y_prob)\n \
+          \   avg_prec = average_precision_score(y_test, y_prob, pos_label=0)\n\n\
+          \    metrics.log_metric(\"recall_clase0\",       recall)\n    metrics.log_metric(\"\
+          balanced_accuracy\",   bal_acc)\n    metrics.log_metric(\"f1_clase0\", \
+          \          f1)\n    metrics.log_metric(\"roc_auc\",             roc_auc)\n\
+          \    metrics.log_metric(\"average_precision\",   avg_prec)\n\n    print(f\"\
+          Recall clase 0:    {recall:.3f}\")\n    print(f\"Balanced Accuracy: {bal_acc:.3f}\"\
+          )\n    print(f\"F1 clase 0:        {f1:.3f}\")\n    print(f\"ROC AUC:  \
+          \         {roc_auc:.3f}\")\n    print(f\"Average Precision: {avg_prec:.3f}\"\
+          )\n\n"
+        image: python:3.11
+        resources:
+          cpuLimit: 1.0
+          memoryLimit: 4.0
+          resourceCpuLimit: '1'
+          resourceMemoryLimit: 4G
+    exec-preprocesar-datos:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - preprocesar_datos
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'pandas' 'scikit-learn'\
+          \ 'imbalanced-learn' 'joblib'  &&  python3 -m pip install --quiet --no-warn-script-location\
+          \ 'kfp==2.16.0' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"\
+          3.9\"' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef preprocesar_datos(\n    dataset: Input[Dataset],\n    train_data:\
+          \ Output[Dataset],\n    test_data: Output[Dataset]\n):\n    \"\"\"Preprocesa\
+          \ y divide los datos\"\"\"\n    import pandas as pd\n    from sklearn.model_selection\
+          \ import train_test_split\n    import numpy as np\n\n    df = pd.read_csv(dataset.path)\n\
+          \n    # Eliminar columnas no necesarias\n    cols_eliminar = ['fecha_prestamo',\
+          \ 'saldo_mora_codeudor', 'puntaje',\n                     'cant_creditosvigentes',\
+          \ 'saldo_total',\n                     'promedio_ingresos_datacredito',\
+          \ 'tendencia_ingresos']\n    df = df.drop(columns=[c for c in cols_eliminar\
+          \ if c in df.columns])\n\n    # Imputar nulos\n    for col in ['puntaje_datacredito',\
+          \ 'saldo_mora', 'saldo_principal']:\n        if col in df.columns:\n   \
+          \         df[col] = df[col].fillna(df[col].median())\n\n    # Nuevas variables\n\
+          \    df['ratio_cuota_salario']  = df['cuota_pactada'] / (df['salario_cliente']\
+          \ + 1)\n    df['salario_log']          = np.log1p(df['salario_cliente'])\n\
+          \    df['capital_prestado_log'] = np.log1p(df['capital_prestado'])\n   \
+          \ df['total_creditos']       = df['creditos_sectorFinanciero'] + \\\n  \
+          \                               df['creditos_sectorCooperativo'] + \\\n\
+          \                                 df['creditos_sectorReal']\n\n    X = df.drop(columns=['Pago_atiempo'])\n\
+          \    y = df['Pago_atiempo']\n\n    X_train, X_test, y_train, y_test = train_test_split(\n\
+          \        X, y, test_size=0.25, random_state=42, stratify=y\n    )\n\n  \
+          \  train_df = X_train.copy()\n    train_df['Pago_atiempo'] = y_train\n \
+          \   test_df  = X_test.copy()\n    test_df['Pago_atiempo']  = y_test\n\n\
+          \    train_df.to_csv(train_data.path, index=False)\n    test_df.to_csv(test_data.path,\
+          \   index=False)\n    print(f\"Train: {train_df.shape} | Test: {test_df.shape}\"\
+          )\n\n"
+        image: python:3.11
+        resources:
+          cpuLimit: 1.0
+          memoryLimit: 4.0
+          resourceCpuLimit: '1'
+          resourceMemoryLimit: 4G
+pipelineInfo:
+  description: "Pipeline custom para predicci\xF3n de pago de cr\xE9ditos"
+  name: cdp-creditos-pipeline
+root:
+  dag:
+    tasks:
+      cargar-datos:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-cargar-datos
+        inputs:
+          parameters:
+            bucket_name:
+              componentInputParameter: bucket_name
+            file_name:
+              componentInputParameter: file_name
+        taskInfo:
+          name: cargar-datos
+      entrenar-modelo:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-entrenar-modelo
+        dependentTasks:
+        - preprocesar-datos
+        inputs:
+          artifacts:
+            train_data:
+              taskOutputArtifact:
+                outputArtifactKey: train_data
+                producerTask: preprocesar-datos
+        taskInfo:
+          name: entrenar-modelo
+      evaluar-modelo:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-evaluar-modelo
+        dependentTasks:
+        - entrenar-modelo
+        - preprocesar-datos
+        inputs:
+          artifacts:
+            model:
+              taskOutputArtifact:
+                outputArtifactKey: model
+                producerTask: entrenar-modelo
+            test_data:
+              taskOutputArtifact:
+                outputArtifactKey: test_data
+                producerTask: preprocesar-datos
+        taskInfo:
+          name: evaluar-modelo
+      preprocesar-datos:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-preprocesar-datos
+        dependentTasks:
+        - cargar-datos
+        inputs:
+          artifacts:
+            dataset:
+              taskOutputArtifact:
+                outputArtifactKey: dataset
+                producerTask: cargar-datos
+        taskInfo:
+          name: preprocesar-datos
+  inputDefinitions:
+    parameters:
+      bucket_name:
+        defaultValue: cdp-proyecto-datos
+        isOptional: true
+        parameterType: STRING
+      file_name:
+        defaultValue: Base_de_datos.csv
+        isOptional: true
+        parameterType: STRING
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.16.0
